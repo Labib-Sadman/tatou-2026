@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   server:
     build:
@@ -40,19 +38,23 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    ports:
-      - "3306:3306"
+    # [sec] No published ports: the server reaches the DB over the internal
+    # Docker network (DB_HOST=db), so the DB is not exposed to other hosts.
     restart: unless-stopped
 
   phpmyadmin:
     image: phpmyadmin:5.2
+    # [sec] Dev-only tool: only starts with `docker compose --profile dev up -d`,
+    # so it never runs in production.
+    profiles: ["dev"]
     environment:
       - PMA_HOST=db
       - PMA_PORT=3306
       - UPLOAD_LIMIT=64M     # <-- use a unit and quote if using YAML key:value form
       - MEMORY_LIMIT=256M
     ports:
-      - "8080:80"
+      # [sec] Bound to localhost only, never reachable from the network.
+      - "127.0.0.1:8080:80"
     depends_on:
       db:
         condition: service_healthy
