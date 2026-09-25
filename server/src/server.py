@@ -20,9 +20,25 @@ except Exception:  # dill is optional
     _pickle = _std_pickle
 
 
+import time
+from collections import defaultdict
 import watermarking_utils as WMUtils
 from watermarking_method import WatermarkingMethod
 #from watermarking_utils import METHODS, apply_watermark, read_watermark, explore_pdf, is_watermarking_applicable, get_method
+
+# --- Simple in-memory rate limiter for login attempts ---
+_LOGIN_ATTEMPTS = defaultdict(list)  # key -> list of failure timestamps
+_LOGIN_MAX_ATTEMPTS = 5
+_LOGIN_WINDOW_SECONDS = 300  # 5 minutes
+
+def _login_rate_limited(key: str) -> bool:
+    now = time.time()
+    attempts = _LOGIN_ATTEMPTS[key]
+    attempts[:] = [t for t in attempts if now - t < _LOGIN_WINDOW_SECONDS]
+    return len(attempts) >= _LOGIN_MAX_ATTEMPTS
+
+def _record_login_failure(key: str) -> None:
+    _LOGIN_ATTEMPTS[key].append(time.time())
 
 def create_app():
     app = Flask(__name__)
@@ -144,6 +160,9 @@ def create_app():
         if not email or not password:
             return jsonify({"error": "email and password are required"}), 400
 
+        if _login_rate_limited(email):
+            return jsonify({"error": "too many failed login attempts, try again later"}), 429
+
         try:
             with get_engine().connect() as conn:
                 row = conn.execute(
@@ -154,6 +173,7 @@ def create_app():
             return jsonify({"error": f"database error: {str(e)}"}), 503
 
         if not row or not check_password_hash(row.hpassword, password):
+            _record_login_failure(email)
             return jsonify({"error": "invalid credentials"}), 401
 
         token = _serializer().dumps({"uid": int(row.id), "login": row.login, "email": row.email})
