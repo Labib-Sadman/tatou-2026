@@ -681,6 +681,12 @@ def create_app():
     @app.post("/api/load-plugin")
     @require_auth
     def load_plugin():
+        # [sec] Disabled: this endpoint deserialized attacker-reachable pickle/dill
+        # files via _pickle.load(), a remote code execution vector. The filename
+        # parameter was also unsanitized, allowing path traversal to read files
+        # outside the intended plugins directory (e.g. a user's own uploads).
+        # Disabled pending a safe redesign (no pickle on untrusted input).
+        return jsonify({"error": "this endpoint is disabled"}), 410
         """
         Load a serialized Python class implementing WatermarkingMethod from
         STORAGE_DIR/files/plugins/<filename>.{pkl|dill} and register it in wm_mod.METHODS.
