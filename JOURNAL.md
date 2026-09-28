@@ -157,3 +157,51 @@ All fixes committed and pushed to `main` (commits `04c50d9`, `b425af7`,
   evidence on future container rebuilds.
 - Individual watermarking method implementation (per-member Phase I
   deliverable) — not started.
+
+## 2026-09-28 — Individual Watermarking Method + `read-watermark` Bug Fix
+
+**Individual deliverable (Labib Sadman):** Implemented `encrypted-metadata`,
+a new watermarking method in `server/src/encrypted_metadata.py`, registered
+in `watermarking_utils.py`'s `METHODS` registry.
+
+- Embeds the secret using **AES-256-GCM** (authenticated encryption —
+  provides real confidentiality and integrity in one primitive), unlike
+  `add_after_eof` which only base64-encodes the secret with a separate HMAC.
+- The AES key is derived from the caller's `key` string via
+  PBKDF2-HMAC-SHA256 with a random per-watermark salt.
+- The encrypted payload is stored in a custom key (`TatouWM`) of the PDF's
+  `/Info` dictionary via PyMuPDF, so it lives in real PDF structure rather
+  than being appended as raw bytes after `%%EOF` (as both existing toy
+  methods do).
+- Added `cryptography>=42.0.0` as a new dependency in `server/pyproject.toml`.
+
+**Testing performed:**
+- CLI (`pdfwm embed` / `pdfwm extract`): correct key recovers the secret;
+  wrong key is cleanly rejected with an authentication error; verified the
+  watermarked PDF still opens correctly and page content is unchanged.
+- Live API (`create-watermark` / `read-watermark` via curl): same result,
+  end to end, through a real authenticated user session.
+- Regression check: re-tested the existing `toy-eof` method through the same
+  API flow to confirm no existing functionality broke.
+- Web UI: visually confirmed via the "Versions" and "Read watermark" panels
+  on `documents.html` — the encrypted secret is correctly recovered with the
+  right key through the actual frontend, not just the API directly.
+
+**Bug found and fixed (affects the whole platform, not just this method):**
+`/api/read-watermark` was querying the `Documents` table for the file path,
+i.e. always reading the **original, unwatermarked** file rather than the
+actual watermarked file stored in `Versions.path`. As a result, no
+watermarking method's secret could ever be recovered via the API — this
+predates tonight's work and would have affected every group using this
+template. Fixed by querying `Versions` (most recent row matching
+`documentid` + `method`) instead of `Documents`. Verified with both the new
+method and the pre-existing `toy-eof` method after the fix.
+
+**Minor hardening:** Trimmed the `get_usage()` string for `encrypted-metadata`
+to avoid disclosing the exact algorithm and `/Info` key name in the public
+`get-watermarking-methods` response, reducing information available to
+other groups probing the API (low-severity — security relies on the AES key,
+not on hiding the field name — but a reasonable minimization since the
+public method list is essentially free intel for an attacker to browse).
+
+All changes committed and pushed to `main`.
