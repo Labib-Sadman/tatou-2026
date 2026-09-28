@@ -50,11 +50,7 @@ class EncryptedMetadataWatermark(WatermarkingMethod):
 
     @staticmethod
     def get_usage() -> str:
-        return (
-            "Embeds an AES-256-GCM encrypted, authenticated secret into a "
-            "custom key ('TatouWM') of the PDF's /Info dictionary. "
-            "Position is ignored."
-        )
+        return "Position is ignored."
 
     def add_watermark(
         self,
