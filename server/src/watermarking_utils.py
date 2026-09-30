@@ -44,6 +44,7 @@ from watermarking_method import (
 from add_after_eof import AddAfterEOF
 from unsafe_bash_bridge_append_eof import UnsafeBashBridgeAppendEOF
 from qim_baseline import QIMBaseline 
+from encrypted_metadata import EncryptedMetadataWatermark
 
 # --------------------
 # Method registry
@@ -53,6 +54,7 @@ METHODS: Dict[str, WatermarkingMethod] = {
     AddAfterEOF.name: AddAfterEOF(),
     UnsafeBashBridgeAppendEOF.name: UnsafeBashBridgeAppendEOF(),
     QIMBaseline.name: QIMBaseline(),
+    EncryptedMetadataWatermark.name: EncryptedMetadataWatermark()
 }
 """Registry of available watermarking methods.
 

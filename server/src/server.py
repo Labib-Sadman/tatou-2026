@@ -20,9 +20,25 @@ except Exception:  # dill is optional
     _pickle = _std_pickle
 
 
+import time
+from collections import defaultdict
 import watermarking_utils as WMUtils
 from watermarking_method import WatermarkingMethod
 #from watermarking_utils import METHODS, apply_watermark, read_watermark, explore_pdf, is_watermarking_applicable, get_method
+
+# --- Simple in-memory rate limiter for login attempts ---
+_LOGIN_ATTEMPTS = defaultdict(list)  # key -> list of failure timestamps
+_LOGIN_MAX_ATTEMPTS = 5
+_LOGIN_WINDOW_SECONDS = 300  # 5 minutes
+
+def _login_rate_limited(key: str) -> bool:
+    now = time.time()
+    attempts = _LOGIN_ATTEMPTS[key]
+    attempts[:] = [t for t in attempts if now - t < _LOGIN_WINDOW_SECONDS]
+    return len(attempts) >= _LOGIN_MAX_ATTEMPTS
+
+def _record_login_failure(key: str) -> None:
+    _LOGIN_ATTEMPTS[key].append(time.time())
 
 def create_app():
     app = Flask(__name__)
@@ -144,6 +160,9 @@ def create_app():
         if not email or not password:
             return jsonify({"error": "email and password are required"}), 400
 
+        if _login_rate_limited(email):
+            return jsonify({"error": "too many failed login attempts, try again later"}), 429
+
         try:
             with get_engine().connect() as conn:
                 row = conn.execute(
@@ -154,6 +173,7 @@ def create_app():
             return jsonify({"error": f"database error: {str(e)}"}), 503
 
         if not row or not check_password_hash(row.hpassword, password):
+            _record_login_failure(email)
             return jsonify({"error": "invalid credentials"}), 401
 
         token = _serializer().dumps({"uid": int(row.id), "login": row.login, "email": row.email})
@@ -169,7 +189,9 @@ def create_app():
         if not file or file.filename == "":
             return jsonify({"error": "empty filename"}), 400
 
-        fname = file.filename
+        fname = secure_filename(file.filename)
+        if not fname:
+            return jsonify({"error": "invalid filename"}), 400
 
         user_dir = app.config["STORAGE_DIR"] / "files" / g.user["login"]
         user_dir.mkdir(parents=True, exist_ok=True)
@@ -659,6 +681,12 @@ def create_app():
     @app.post("/api/load-plugin")
     @require_auth
     def load_plugin():
+        # [sec] Disabled: this endpoint deserialized attacker-reachable pickle/dill
+        # files via _pickle.load(), a remote code execution vector. The filename
+        # parameter was also unsanitized, allowing path traversal to read files
+        # outside the intended plugins directory (e.g. a user's own uploads).
+        # Disabled pending a safe redesign (no pickle on untrusted input).
+        return jsonify({"error": "this endpoint is disabled"}), 410
         """
         Load a serialized Python class implementing WatermarkingMethod from
         STORAGE_DIR/files/plugins/<filename>.{pkl|dill} and register it in wm_mod.METHODS.
@@ -764,22 +792,27 @@ def create_app():
         if not method or not isinstance(key, str):
             return jsonify({"error": "method, and key are required"}), 400
 
-        # lookup the document; FIXME enforce ownership
+        # lookup the most recent watermarked VERSION of this document made
+        # with this method (read-watermark must read the watermarked file,
+        # not the original document, which never contains the embedded
+        # secret in the first place).
         try:
             with get_engine().connect() as conn:
                 row = conn.execute(
                     text("""
-                        SELECT id, name, path
-                        FROM Documents
-                        WHERE id = :id
+                        SELECT id, path
+                        FROM Versions
+                        WHERE documentid = :documentid AND method = :method
+                        ORDER BY id DESC
+                        LIMIT 1
                     """),
-                    {"id": doc_id},
+                    {"documentid": doc_id, "method": method},
                 ).first()
         except Exception as e:
             return jsonify({"error": f"database error: {str(e)}"}), 503
 
         if not row:
-            return jsonify({"error": "document not found"}), 404
+            return jsonify({"error": "no watermarked version found for this document and method"}), 404
 
         # resolve path safely under STORAGE_DIR
         storage_root = Path(app.config["STORAGE_DIR"]).resolve()

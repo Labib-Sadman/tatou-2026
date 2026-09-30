@@ -8,6 +8,7 @@ services:
     volumes:
       - user-files:/app/storage
     environment:
+      - SECRET_KEY=${SECRET_KEY}
       - PYTHONUNBUFFERED=1
       # DB connection details for future use by the API
       - DB_HOST=db
