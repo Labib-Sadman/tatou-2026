@@ -205,3 +205,9 @@ not on hiding the field name — but a reasonable minimization since the
 public method list is essentially free intel for an attacker to browse).
 
 All changes committed and pushed to `main`.
+
+## 2026-10-01 — Individual Watermarking Method: qim-baseline
+
+**Individual deliverable (MK3713):** Implemented `qim-baseline` in `server/src/qim_baseline.py`, registered in the `METHODS` registry, with tests in `server/test/test_qim_baseline.py`. The method hides the secret in the parity of quantized text-line coordinates (Quantization Index Modulation): both the horizontal start position and the baseline of every text line are snapped onto a 0.25pt grid, where an even grid index encodes a 0 and an odd index a 1. Quantizing rather than shifting relative to the original matters because the owner of a leaked document has no original to compare against — extraction just divides by the step, rounds, and reads the parity. The secret is encrypted with a key-derived keystream and authenticated with a 64-bit truncated HMAC-SHA256, and the payload is repeated across all available carriers with a per-bit majority vote on extraction. Tested end to end through the API and with 17 unit tests: extracted text stays byte-identical (max word displacement 0.249pt), output is deterministic, wrong keys and unwatermarked PDFs are rejected, and the mark survives re-saving, metadata stripping and trailing-page loss. Known limitations: any tool that regenerates content streams (Ghostscript, print-to-PDF, rasterisation) destroys it, and removing content from the front of a document shifts repetitions out of phase and defeats extraction.
+
+All changes committed and pushed to `main`.
