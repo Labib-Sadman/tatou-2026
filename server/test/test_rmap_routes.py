@@ -315,3 +315,65 @@ class TestReplayBehaviour:
 
         assert tc.post("/api/rmap-get-link", json=a.build_msg2()).status_code == 200
         assert tc.post("/api/rmap-get-link", json=b.build_msg2()).status_code == 200
+
+
+class TestSessionHandling:
+    """Session-handling behaviour as measured for Track 1 (commit 5598157).
+
+    FINDING: the server keeps a single pending session per identity, with
+    no invalidation on use. `rmap-get-link` carries only a nonce and no
+    identity, so the server has to locate the session some other way;
+    keying it by identity, one slot deep, is the simplest way to do that.
+
+    Three consequences follow, all pinned below: a newer Message 1
+    silently discards whatever was pending for that identity (so two
+    overlapping legitimate handshakes collide, with no attacker
+    involved); a completed session stays answerable until something
+    displaces it (which is why replay is accepted); and identities do not
+    interfere with one another.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _fresh_session_state(self, env):
+        env["app"].config.pop("_RMAP_SERVER", None)
+        yield
+
+    def test_two_overlapping_handshakes_collide(self, env):
+        """Availability: a second handshake voids the first one's session.
+
+        No attacker here. A client that retries, or two clients acting
+        for the same group, breaks the earlier request.
+        """
+        tc = env["app"].test_client()
+        first, second = _client(env), _client(env)
+
+        r1 = tc.post("/api/rmap-initiate", json=first.build_msg1())
+        assert r1.status_code == 200
+        first.process_resp1(r1.get_json())
+
+        r2 = tc.post("/api/rmap-initiate", json=second.build_msg1())
+        assert r2.status_code == 200
+        second.process_resp1(r2.get_json())
+
+        assert tc.post("/api/rmap-get-link", json=first.build_msg2()).status_code == 409, (
+            "the earlier handshake survived; session handling has changed"
+        )
+        assert tc.post("/api/rmap-get-link", json=second.build_msg2()).status_code == 200
+
+    def test_a_completed_session_is_displaced_by_a_new_message_1(self, env):
+        """A used Message 2 stops working once a newer session exists.
+
+        Contrast with TestReplayBehaviour: the same Message 2 is accepted
+        when replayed immediately. Nothing marks a session as used; it
+        simply lives until overwritten.
+        """
+        tc = env["app"].test_client()
+        client = _client(env)
+        r1 = tc.post("/api/rmap-initiate", json=client.build_msg1())
+        client.process_resp1(r1.get_json())
+        msg2 = client.build_msg2()
+        assert tc.post("/api/rmap-get-link", json=msg2).status_code == 200
+
+        successor = _client(env)
+        assert tc.post("/api/rmap-initiate", json=successor.build_msg1()).status_code == 200
+        assert tc.post("/api/rmap-get-link", json=msg2).status_code == 409
