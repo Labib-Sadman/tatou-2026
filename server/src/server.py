@@ -24,6 +24,7 @@ import time
 from collections import defaultdict
 import watermarking_utils as WMUtils
 from watermarking_method import WatermarkingMethod
+from rmap_routes import register_rmap_routes
 #from watermarking_utils import METHODS, apply_watermark, read_watermark, explore_pdf, is_watermarking_applicable, get_method
 
 # --- Simple in-memory rate limiter for login attempts ---
@@ -842,6 +843,9 @@ def create_app():
             "method": method,
             "position": position
         }), 201
+
+    # --- RMAP handshake endpoints (rmap-initiate, rmap-get-link) ---
+    register_rmap_routes(app, get_engine)
 
     return app
     
