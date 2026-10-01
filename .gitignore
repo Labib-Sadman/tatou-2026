@@ -205,3 +205,8 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# RMAP keys - the server private key must never be committed
+keys/
+*.asc
+!keys/clients/*.asc
