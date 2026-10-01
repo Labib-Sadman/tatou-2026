@@ -199,3 +199,181 @@ class TestUnconfigured:
         tc = app.test_client()
         assert tc.post("/api/rmap-initiate", json={"payload": "x"}).status_code == 503
         assert tc.post("/api/rmap-get-link", json={"payload": "x"}).status_code == 503
+
+
+class TestReplayBehaviour:
+    """Replay behaviour as measured for FPT_RPL.1 (Track 1, commit 5598157).
+
+    FINDING: the handshake does NOT detect replay. Both a captured
+    Message 1 and a captured Message 2 are accepted when resent. These
+    tests pin the measured behaviour so that any future change — a fix,
+    or a regression — is visible instead of silent.
+
+    Each test resets the server's session state first. An earlier version
+    of this work ran several replay cases in sequence against one shared
+    session; because replaying Message 1 displaces the pending session,
+    later cases ran against state the earlier ones had already destroyed
+    and returned 409, which looked like replay rejection. Isolation is
+    what makes these results trustworthy.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _fresh_session_state(self, env):
+        env["app"].config.pop("_RMAP_SERVER", None)
+        yield
+
+    def test_replayed_message_2_is_accepted(self, env):
+        """A captured Message 2 can be resent and is answered again."""
+        tc = env["app"].test_client()
+        client = _client(env)
+        r1 = tc.post("/api/rmap-initiate", json=client.build_msg1())
+        client.process_resp1(r1.get_json())
+        msg2 = client.build_msg2()
+
+        first = tc.post("/api/rmap-get-link", json=msg2)
+        assert first.status_code == 200
+        replay = tc.post("/api/rmap-get-link", json=msg2)
+        assert replay.status_code == 200, (
+            "Message 2 replay is now rejected - replay handling has changed "
+            "and the Track 1 finding needs revisiting"
+        )
+
+    def test_replay_returns_the_same_link_not_a_new_one(self, env):
+        """Impact bound: the replay yields the existing link, not a fresh one."""
+        tc = env["app"].test_client()
+        client = _client(env)
+        r1 = tc.post("/api/rmap-initiate", json=client.build_msg1())
+        client.process_resp1(r1.get_json())
+        msg2 = client.build_msg2()
+        tc.post("/api/rmap-get-link", json=msg2)
+        replay = tc.post("/api/rmap-get-link", json=msg2)
+        assert client.expected_link in client.process_resp2(replay.get_json())
+
+    def test_replay_creates_no_duplicate_version(self, env):
+        """A replay must not produce a second watermarked copy."""
+        tc = env["app"].test_client()
+        client = _client(env)
+        r1 = tc.post("/api/rmap-initiate", json=client.build_msg1())
+        client.process_resp1(r1.get_json())
+        msg2 = client.build_msg2()
+        tc.post("/api/rmap-get-link", json=msg2)
+        tc.post("/api/rmap-get-link", json=msg2)
+        with env["engine"].connect() as conn:
+            count = conn.execute(
+                text("SELECT COUNT(*) FROM Versions WHERE link = :l"),
+                {"l": client.expected_link},
+            ).scalar()
+        assert count == 1
+
+    def test_replayed_message_1_is_accepted_and_displaces_the_session(self, env):
+        """Replaying Message 1 starts a new session and voids the pending one.
+
+        No link is obtainable this way — both responses are encrypted to
+        the client — but the legitimate client is locked out, which is a
+        denial of service against that identity.
+        """
+        tc = env["app"].test_client()
+        client = _client(env)
+        msg1 = client.build_msg1()
+
+        first = tc.post("/api/rmap-initiate", json=msg1)
+        assert first.status_code == 200
+        replay = tc.post("/api/rmap-initiate", json=msg1)
+        assert replay.status_code == 200
+
+        client.process_resp1(first.get_json())      # the ORIGINAL server nonce
+        resp = tc.post("/api/rmap-get-link", json=client.build_msg2())
+        assert resp.status_code == 409, "original session survived the replay"
+
+    def test_the_displacing_session_still_completes(self, env):
+        """Control for the test above: the newer session itself works."""
+        tc = env["app"].test_client()
+        client = _client(env)
+        msg1 = client.build_msg1()
+        tc.post("/api/rmap-initiate", json=msg1)
+        second = tc.post("/api/rmap-initiate", json=msg1)
+        client.process_resp1(second.get_json())
+        assert tc.post("/api/rmap-get-link", json=client.build_msg2()).status_code == 200
+
+    def test_sessions_are_isolated_per_identity(self, env):
+        """One identity's handshake must not disturb another's."""
+        _keygen("Group_21", env["keys"] / "g21_priv.asc",
+                env["keys"] / "clients" / "Group_21.asc")
+        env["app"].config.pop("_RMAP_SERVER", None)   # reload the key directory
+
+        tc = env["app"].test_client()
+        a = _client(env, IDENTITY, "client_priv.asc")
+        b = _client(env, "Group_21", "g21_priv.asc")
+
+        ra = tc.post("/api/rmap-initiate", json=a.build_msg1())
+        assert ra.status_code == 200
+        a.process_resp1(ra.get_json())
+
+        rb = tc.post("/api/rmap-initiate", json=b.build_msg1())
+        assert rb.status_code == 200, "second identity not registered"
+        b.process_resp1(rb.get_json())
+
+        assert tc.post("/api/rmap-get-link", json=a.build_msg2()).status_code == 200
+        assert tc.post("/api/rmap-get-link", json=b.build_msg2()).status_code == 200
+
+
+class TestSessionHandling:
+    """Session-handling behaviour as measured for Track 1 (commit 5598157).
+
+    FINDING: the server keeps a single pending session per identity, with
+    no invalidation on use. `rmap-get-link` carries only a nonce and no
+    identity, so the server has to locate the session some other way;
+    keying it by identity, one slot deep, is the simplest way to do that.
+
+    Three consequences follow, all pinned below: a newer Message 1
+    silently discards whatever was pending for that identity (so two
+    overlapping legitimate handshakes collide, with no attacker
+    involved); a completed session stays answerable until something
+    displaces it (which is why replay is accepted); and identities do not
+    interfere with one another.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _fresh_session_state(self, env):
+        env["app"].config.pop("_RMAP_SERVER", None)
+        yield
+
+    def test_two_overlapping_handshakes_collide(self, env):
+        """Availability: a second handshake voids the first one's session.
+
+        No attacker here. A client that retries, or two clients acting
+        for the same group, breaks the earlier request.
+        """
+        tc = env["app"].test_client()
+        first, second = _client(env), _client(env)
+
+        r1 = tc.post("/api/rmap-initiate", json=first.build_msg1())
+        assert r1.status_code == 200
+        first.process_resp1(r1.get_json())
+
+        r2 = tc.post("/api/rmap-initiate", json=second.build_msg1())
+        assert r2.status_code == 200
+        second.process_resp1(r2.get_json())
+
+        assert tc.post("/api/rmap-get-link", json=first.build_msg2()).status_code == 409, (
+            "the earlier handshake survived; session handling has changed"
+        )
+        assert tc.post("/api/rmap-get-link", json=second.build_msg2()).status_code == 200
+
+    def test_a_completed_session_is_displaced_by_a_new_message_1(self, env):
+        """A used Message 2 stops working once a newer session exists.
+
+        Contrast with TestReplayBehaviour: the same Message 2 is accepted
+        when replayed immediately. Nothing marks a session as used; it
+        simply lives until overwritten.
+        """
+        tc = env["app"].test_client()
+        client = _client(env)
+        r1 = tc.post("/api/rmap-initiate", json=client.build_msg1())
+        client.process_resp1(r1.get_json())
+        msg2 = client.build_msg2()
+        assert tc.post("/api/rmap-get-link", json=msg2).status_code == 200
+
+        successor = _client(env)
+        assert tc.post("/api/rmap-initiate", json=successor.build_msg1()).status_code == 200
+        assert tc.post("/api/rmap-get-link", json=msg2).status_code == 409
