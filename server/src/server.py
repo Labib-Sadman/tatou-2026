@@ -1,6 +1,7 @@
 import os
 import io
 import hashlib
+import secrets
 import datetime as dt
 from pathlib import Path
 from functools import wraps
@@ -628,7 +629,8 @@ def create_app():
         dest_dir = file_path.parent / "watermarks"
         dest_dir.mkdir(parents=True, exist_ok=True)
 
-        candidate = f"{base_name}__{intended_slug}.pdf"
+        link_token = secrets.token_hex(20)  # [sec] random, not derived from names
+        candidate = f"{base_name}__{intended_slug}__{link_token[:8]}.pdf"
         dest_path = dest_dir / candidate
 
         # write bytes
@@ -638,8 +640,6 @@ def create_app():
         except Exception as e:
             return jsonify({"error": f"failed to write watermarked file: {e}"}), 500
 
-        # link token = sha1(watermarked_file_name)
-        link_token = hashlib.sha1(candidate.encode("utf-8")).hexdigest()
 
         try:
             with get_engine().begin() as conn:
