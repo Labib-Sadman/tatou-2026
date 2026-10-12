@@ -11,7 +11,7 @@ dependencies = [
 	"SQLAlchemy==2.0.43",
 	"dill==0.4.0",
 	"cryptography>=42.0.0",
-	"rmap @ git+https://github.com/nharrand/RMAP.git@v1.0.2"
+	"rmap @ https://github.com/nharrand/RMAP/releases/download/v2.0.0/rmap-2.0.0-py3-none-any.whl"
 ]
 
 [project.optional-dependencies]
