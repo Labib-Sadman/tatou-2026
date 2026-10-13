@@ -412,3 +412,43 @@ the second access-control bug found this way (the first being the
 guessable-link issue on 2026-10-11, which this incident shows was not
 sufficient on its own — the missing `ownerid` check let the link be minted
 through the legitimate API regardless of link predictability).
+
+## 2026-10-13 — Addendum: Full Scope of the `create-watermark` Access Control Breach
+
+After fixing and logging the `flag_3` incident above, checked whether the
+same missing-ownership-check bug had been exploited against other
+documents, not just `flag_3`. It had, extensively.
+
+Queried the whole `Versions` table for any `intended_for` value containing
+"audit" and found **39 leaked watermarked copies**, spanning roughly 30
+distinct documents belonging to many different users across the server —
+essentially a systematic enumeration of document ids 2 through 53. Two
+different label patterns were present: `g16-audit` (the large majority,
+clearly Group 16) and `group20-audit` (5 earlier entries, despite our own
+accounts not having created them — likely the same actor testing under a
+different/earlier label, or a different party; not conclusively
+attributed).
+
+File names confirmed the exploitation window ran both before and after our
+2026-10-11 guessable-link fix: 14 of the 39 used the old, predictable
+naming scheme (already overwritten/missing by the time of this check), and
+25 used the new random-token naming scheme introduced on 2026-10-11 — i.e.
+the broken ownership check alone was sufficient to keep exploiting the
+endpoint even after the link-guessing bug was fixed, since `create-watermark`
+returns the link directly in its JSON response regardless of how
+unguessable it is.
+
+**Containment:** Wrote a one-off script to delete all 39 `Versions` rows
+and their corresponding files from disk in one pass. Verified zero
+remaining rows matching the pattern, and confirmed `/healthz` still green
+afterward. No DB or server restart was required, since this was pure data
+cleanup against the already-fixed endpoint.
+
+**Assessment:** The watermarked copies that leaked are of ordinary
+user-uploaded test files (`minimal.pdf`, `test.pdf`, `file`, etc. — mostly
+small placeholder/test documents from various team members' own testing
+sessions) rather than sensitive content, aside from `flag_3` itself
+(covered above). No further action identified beyond the access-control
+fix and cleanup already done. Not escalated to the instructor, since the
+underlying vulnerability is already fixed and the exposed content was not
+sensitive beyond the flag already reported and rotated.
