@@ -61,9 +61,10 @@ class UnsafeBashBridgeAppendEOF(WatermarkingMethod):
         """Extract the secret if present.
            Prints whatever there is after %EOF
         """
-        cmd = "sed -n '1,/^\(%%EOF\|.*%%EOF\)$/!p' " + str(pdf.resolve())
-        
-        res = subprocess.run(cmd, shell=True, check=True, encoding="utf-8", capture_output=True)
+        res = subprocess.run(
+            ["sed", "-n", r"1,/^\(%%EOF\|.*%%EOF\)$/!p", str(pdf.resolve())],
+            check=True, encoding="utf-8", capture_output=True,
+        )
        
 
         return res.stdout

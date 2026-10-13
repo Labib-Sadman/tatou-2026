@@ -452,3 +452,25 @@ sessions) rather than sensitive content, aside from `flag_3` itself
 fix and cleanup already done. Not escalated to the instructor, since the
 underlying vulnerability is already fixed and the exposed content was not
 sensitive beyond the flag already reported and rotated.
+
+## 2026-10-14 — Incident: flag_2 captured again, unauthenticated SQL injection in delete-document fixed
+
+Professor Nicolas emailed that `flag_2` had been captured and provided a rotation value: `bd924f38e25219dd32ce2a78e5017bc29916d034`.
+
+**Containment.** Rotated `FLAG_2` in `.env` to the new value and rebuilt the server container. Confirmed the new value is present at `/app/flag` inside the container and that `/healthz` reports `db_connected: true`.
+
+**Root cause (primary finding): unauthenticated SQL injection in `/api/delete-document`.** The route had no `@require_auth` decorator and built its lookup by string concatenation: `query = "SELECT * FROM Documents WHERE id = " + doc_id`, with `doc_id` taken directly from the request (path, query string, or JSON body). Any unauthenticated caller could inject SQL — e.g. a `UNION SELECT` to read arbitrary rows (including `Users` password hashes and every document path), or to control which row the delete logic then acts on. Same "a comment claims a check the code does not perform" pattern seen earlier in `get-version` and `create-watermark`; here the query itself was the defect.
+
+**Fix.** Added `@require_auth`, converted the id to `int`, parameterised the lookup and enforced ownership (`WHERE id = :id AND ownerid = :uid`), and parameterised the delete the same way. Verified after rebuild: an unauthenticated injection attempt (`POST /api/delete-document {"id":"0 OR 1=1"}`) now returns `401` before any SQL runs.
+
+**Secondary hardening.** The toy method `bash-bridge-eof` (`unsafe_bash_bridge_append_eof.py`) still executed a shell command in `read_secret` (`subprocess.run(cmd, shell=True, ...)` built from the file path). The path is sanitised on upload (`secure_filename`), so this was latent rather than readily reachable, but a `shell=True` call in the server container is exactly the class of bug that can read `/app/flag`. Replaced it with an argument list and no shell. `add_watermark` for this method was already safe (byte append only, 2026-09-14 fix); `load-plugin` remains disabled (`410`).
+
+**Investigation.** Server logs did not cover the capture: logging is still ephemeral and resets on each rebuild (flagged since 2026-09-25), so the exact time and method could not be reconstructed from logs. The `Users` table shows numerous attacker-created accounts consistent with sustained probing by several groups, including ones named `injector`, `idor`, `evil`, `attacker`, `hacker12`, repeated `plugins` accounts, `g16audit_20`, `g34flag3` and `probe12a`–`probe12h`. The `injector` account is consistent with the delete-document injection having been discovered, but direct attribution for this specific capture is not possible without logs.
+
+**Honest scope note on the vector.** The SQL injection reads the database, while `flag_2` is a file in the server container (`/app/flag`); a database-layer injection does not read that file directly. The confirmed fixes above close real critical issues, but the exact route by which `/app/flag` was read this time is not established — plausible candidates include an earlier compromise (command injection was open until 2026-09-14) with a persistence backdoor, or a vector not captured by the available evidence. Attacker accounts were left in place rather than deleted, to avoid destroying other groups' data.
+
+**Outstanding / follow-up.**
+- Identify and close the actual server-side file-read / RCE path used to reach `/app/flag`; check the container for a persistence backdoor (unexpected files, processes, cron, modified sources).
+- Persistent, exportable container logging — still not done; it would have pinned the capture window here.
+- Consider removing the `bash-bridge-eof` toy method from the registry entirely.
+- Database password rotation — still deferred; worth reconsidering given confirmed unauthorised access.
