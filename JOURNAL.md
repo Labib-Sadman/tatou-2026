@@ -349,3 +349,66 @@ present in the code.
   groups to use.
 - A real cross-group RMAP test (per Professor Nicolas's recommendation) has not been
   done yet.
+
+## 2026-10-13 — Incident: `flag_3` Captured by Another Group
+
+**Notification:** Instructor (Professor Nicolas) emailed that our `flag_3` had
+been captured by another group and asked us to rotate it, investigate the
+cause, fix the vulnerability, and log the incident (this entry). New value
+provided: `f82589697ef0a2b4a7271eb942a073b0801d4918`.
+
+**Background:** `flag_3` is delivered as a PDF (per the project
+instructions), uploaded by the instructor's own account
+(`mr_important@example.com`, user id 52) as document id 43, containing the
+plain text `"Flag 3"` followed by the flag value.
+
+**Investigation:** Queried the `Versions` table for `documentid = 43` and
+found four existing watermarked copies of the document that we never
+created — two explicitly labelled `intended_for = "g16-audit"`, and two
+using disposable-looking email addresses as the `intended_for` value with
+the `toy-eof` method. None of these were requested by our own accounts.
+
+**Root cause:** `POST /api/create-watermark` looked up the target document
+with:
+
+    SELECT id, name, path FROM Documents WHERE id = :id LIMIT 1
+
+despite an in-code comment claiming ownership was enforced — there was no
+`ownerid` filter at all. Any authenticated user (including a throwaway
+account self-registered through our own open `create-user` endpoint) could
+request a watermark of *any* document by id, including documents owned by
+other users, and the response returns the resulting download link directly.
+This is almost certainly how `flag_3` was captured: enumerate/guess document
+ids, call `create-watermark` on id 43, use the returned link.
+
+**Fix:** Added the missing ownership check, matching the existing pattern in
+`get-document`:
+
+    SELECT id, name, path FROM Documents WHERE id = :id AND ownerid = :uid LIMIT 1
+
+Verified with a fresh, unrelated test account: requesting a watermark of
+document 43 now returns `404` instead of succeeding.
+
+**Containment:** The four leaked `Versions` rows were independent files
+already written to disk, so fixing the query alone would not have revoked
+already-issued links. Deleted all four watermarked files and their
+`Versions` rows.
+
+**Flag rotation:** Rewrote the flag PDF's text to the new value. Initially
+used an incremental save (`doc.saveIncr()`), then discovered the *old* flag
+value was still present in the raw file bytes (incremental saves retain
+prior revisions) even though normal text extraction showed only the new
+value — a residual-disclosure risk if anyone inspected the file at a lower
+level. Re-saved with a full rewrite and garbage collection
+(`doc.save(..., garbage=4, clean=True)`) and confirmed the old value is no
+longer present anywhere in the file. Updated the stored `sha256`/`size` for
+document id 43 to match.
+
+Committed and pushed the access-control fix to `main` (commit `d5ab91c`).
+
+**Outstanding:** Should audit other routes for the same "comment claims a
+check that the query doesn't actually perform" pattern, since this is now
+the second access-control bug found this way (the first being the
+guessable-link issue on 2026-10-11, which this incident shows was not
+sufficient on its own — the missing `ownerid` check let the link be minted
+through the legitimate API regardless of link predictability).
