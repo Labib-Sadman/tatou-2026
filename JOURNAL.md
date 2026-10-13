@@ -223,3 +223,129 @@ Verified by 10 automated tests plus a manual end-to-end run against the live sta
 Tested our own deployment (commit 5598157, single gunicorn worker) against the replay angle of T.RMAP_FORGE, using our `Group_20` keypair. **Finding: the handshake does not detect replay.** A captured Message 2 resent to `rmap-get-link` is accepted and returns the same link again; a captured Message 1 resent to `rmap-initiate` is also accepted and starts a new session that displaces the pending one, so the legitimate client can no longer complete with the nonce it originally received (409). No link is obtainable this way — both responses are encrypted to the client — and no duplicate `Versions` row is created, so the impact is denial of service against one identity's handshake rather than forgery. The underlying cause is that the server keeps a single pending session per identity with no invalidation on use: a session stays answerable until a newer Message 1 displaces it. The same design means two *legitimate* overlapping handshakes collide, with no attacker involved. Sessions are isolated per identity, so one group cannot disturb another's.
 
 **Methodology**: The first test run executed several replay cases in sequence against a shared session. Because a Message 1 replay displaces the pending session, later cases ran against state the earlier ones had already destroyed, returning 409s that looked like replay rejection — a false pass that initially led us to conclude replay *was* rejected. Re-running each case in isolation against a freshly restarted server inverted the result. The measured behaviour is now pinned by 8 regression tests in `server/test/test_rmap_routes.py` (`TestReplayBehaviour`, `TestSessionHandling`), each resetting session state first, so a future change to replay or session handling fails the suite instead of passing silently. **Open:** replay detection is not implemented; rejecting a previously used nonce, and invalidating a session once used, would close both findings.
+
+## 2026-10-11 — Vulnerability: Guessable Watermark Link
+
+**Found:** `/api/get-version/<link>` has no authentication by design — the link
+itself is the credential. The `link` token was computed as
+`sha1(watermarked_file_name)`, and the file name was built as
+`"<original_name>__<intended_for_slug>.pdf"` — both fully derivable from
+public information (the document name and the intended recipient). Anyone
+who could guess those two strings could compute the link and download our
+watermarked PDF without logging in.
+
+**Evidence:** Queried the live `Versions` table and confirmed 8/8 recent
+rows matched `sha1(CONCAT(doc_name_stem, "__", intended_for, ".pdf"))`,
+confirming the bug was real and currently exploitable, not theoretical.
+(This check also resolved an earlier open question: a `flag_3` document
+owned by `mr_important@example.com`, user id 52, was Professor Nicolas's legitimate
+Phase II flag delivery, not a stray audit artifact — confirmed only one such
+account exists, no naming collision.)
+
+**Fix:** In `server/src/server.py`, `create-watermark` now generates
+`link_token = secrets.token_hex(20)` first and embeds only the first 8 hex
+characters into the file name (`"<name>__<intended>__<token8>.pdf"`), instead
+of deriving the link from the file name via `sha1`. The link is now
+independent random data, not guessable from any public information.
+
+**Also fixed in the same pass:**
+- `RMAP_KEY` was unset in `.env` (startup warning: "defaulting to a blank
+  string"), meaning any RMAP watermark created up to this point would have
+  been created with a blank key. Generated and added a proper 32-byte
+  random key.
+- The `phpMyAdmin` container was three weeks stale and still bound to
+  `0.0.0.0:8080`, publicly exposed, despite `docker-compose.yml` already
+  specifying `127.0.0.1:8080` only — the *running* container predated that
+  fix and a plain `docker compose down`/`up` does not touch a profile-gated
+  service. Stopped and removed it explicitly; it now only starts when
+  requested with `--profile dev`.
+- Pulled 13 commits that were on `origin/main` but had never been deployed
+  to the VM, including the RMAP implementation (commit `5598157`) and the
+  auth regression tests (commit `1e246e8`).
+
+**Verification:** `sha1("linktest__g20-audit.pdf")` does not match a real
+issued link, confirming the old guessing formula no longer works; a real
+issued link still returns `200` from `get-version`, confirming legitimate
+downloads still work.
+
+Committed and pushed to `main` (commit `44423d9`).
+
+## 2026-10-11 — Audit of `rmap_routes.py`
+
+Read the full RMAP routes file end to end. Our own route code is sound:
+error messages are deliberately generic (to avoid leaking protocol state to
+an attacker), the path-traversal check is reused from the rest of the app,
+the watermark secret is hardcoded to the authenticated identity (never
+client-supplied), and a duplicate `rmap-get-link` call is deduplicated
+against the `Versions` table so no second file or row is ever created.
+
+Traced the previously-found replay weakness (see 2026-10-01 entry, SFR
+FPT_RPL.1) to its root cause: it lives in the `rmap` pip package itself
+(the course's reference implementation), not in our route code. In
+`rmap/server.py`, `receiveMsg2()` never invalidates the session nonce after
+a successful handshake, so resending an identical Message 2 just re-derives
+the same link and returns 200 again. Severity assessed as low in practice —
+`resp2` is PGP-encrypted to the requesting identity's own public key, so a
+network observer who replays the captured ciphertext still cannot read the
+result without that identity's private key. Decided not to patch this
+ourselves (third-party library code that would be overwritten on every
+rebuild anyway); Professor Nicolas's 2026-10-11 announcement says he is addressing
+RMAP issues this week.
+
+## 2026-10-12/13 — RMAP v2.0.0 Upgrade and First Working Deployment
+
+Professor Nicolas announced the shared test bench's RMAP test is now working, and
+published `rmap` v2.0.0, fixing a server crash on a malformed-but-validly-
+encrypted message found by another group.
+
+- Updated the `rmap` dependency in `server/pyproject.toml` from the v1.0.2
+  git tag to the v2.0.0 release wheel and rebuilt. Confirmed `pip show rmap`
+  reports `2.0.0` and `/healthz` is unaffected. Committed and pushed
+  (commit `05dbe9b`).
+- Checked `RMAP_LINK_PREFIX`: unset in `.env`, defaulting to an empty
+  string, so we already return the bare 32-hex nonce concatenation as the
+  link rather than a full URL — matching what Professor Nicolas said the test bench
+  expects (some other groups fail this check for sending the full URL
+  instead).
+
+**Bigger finding: RMAP had never actually been deployed on the shared VM.**
+`keys/` (correctly gitignored) was completely empty — no server keypair, no
+`keys/clients/` directory — and `.env` had neither `RMAP_DOCUMENT_ID` nor
+`RMAP_PASSPHRASE` set. Every real call to `rmap-initiate` or `rmap-get-link`
+would have returned `503` ("rmap not configured on this server"). The
+2026-10-01 entry's "manual end-to-end run against the live stack" must have
+been run against a different, local setup, since the shared VM itself was
+never wired up with real keys or an assigned document.
+
+Fixed by following `RMAP_SETUP.md`:
+1. Generated a fresh server keypair (`rmap.keygen`, name "Group 20"),
+   placed at `keys/server_priv.asc` / `keys/server_pub.asc` on the VM
+   (private key `chmod 600`). Not committed — gitignored by design, exists
+   only on this VM. **Needs separate backup/handoff if the VM is rebuilt.**
+2. Uploaded the assigned `Group_20.pdf` (emailed earlier by Professor Nicolas) via
+   the normal upload API under a new dedicated account,
+   `rmap-service@softsec.invalid` (user id 70), document id 55.
+3. Set `RMAP_DOCUMENT_ID=55` in `.env` and recreated the server container
+   so it picked up the new keypair and env var.
+4. Registered a throwaway test identity (`TestClient20`) in
+   `keys/clients/` to exercise the handshake without touching any real
+   group's keys.
+
+**End-to-end verification**, using the `rmap` package's own CLI test
+client against our live endpoints: Message 1/Response 1 exchanged nonces
+correctly; Message 2/Response 2 returned a link that matched the client's
+independently-computed expected value exactly; `GET /api/get-version/<link>`
+returned `200` with a genuine watermarked PDF. Cleaned up the test
+`Versions` row afterward.
+
+RMAP is now genuinely functional end-to-end on the shared VM, not merely
+present in the code.
+
+**Still outstanding:**
+- `keys/clients/` only has the throwaway test identity — real client keys
+  from the iLearn key directory still need to be added before a real
+  cross-group handshake will succeed.
+- Our `keys/server_pub.asc` has not yet been published anywhere for other
+  groups to use.
+- A real cross-group RMAP test (per Professor Nicolas's recommendation) has not been
+  done yet.
