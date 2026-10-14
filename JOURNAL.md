@@ -355,7 +355,7 @@ present in the code.
 **Notification:** Instructor (Professor Nicolas) emailed that our `flag_3` had
 been captured by another group and asked us to rotate it, investigate the
 cause, fix the vulnerability, and log the incident (this entry). New value
-provided: `f82589697ef0a2b4a7271eb942a073b0801d4918`.
+provided: `[REDACTED — value in instructor email]`.
 
 **Background:** `flag_3` is delivered as a PDF (per the project
 instructions), uploaded by the instructor's own account
@@ -455,7 +455,7 @@ sensitive beyond the flag already reported and rotated.
 
 ## 2026-10-14 — Incident: flag_2 captured again, unauthenticated SQL injection in delete-document fixed
 
-Professor Nicolas emailed that `flag_2` had been captured and provided a rotation value: `bd924f38e25219dd32ce2a78e5017bc29916d034`.
+Professor Nicolas emailed that `flag_2` had been captured and provided a rotation value: `[REDACTED — value in instructor email]`.
 
 **Containment.** Rotated `FLAG_2` in `.env` to the new value and rebuilt the server container. Confirmed the new value is present at `/app/flag` inside the container and that `/healthz` reports `db_connected: true`.
 
@@ -474,3 +474,21 @@ Professor Nicolas emailed that `flag_2` had been captured and provided a rotatio
 - Persistent, exportable container logging — still not done; it would have pinned the capture window here.
 - Consider removing the `bash-bridge-eof` toy method from the registry entirely.
 - Database password rotation — still deferred; worth reconsidering given confirmed unauthorised access.
+
+## 2026-10-14 (late) — Incident: flag_2 captured again; root cause was self-inflicted disclosure in the public repository
+
+Professor Nicolas reported flag_2 captured again and provided a new rotation value (kept out of this file by policy from now on; see instructor email).
+
+**Containment.** Rotated FLAG_2 in `.env` to the new value and rebuilt the server container; confirmed the new value at `/app/flag` and `/healthz` green.
+
+**Root cause: the rotated flag values were being committed to JOURNAL.md and pushed to our repository, which is a public fork.** Each time we rotated a flag and documented the new value, that value became publicly readable within minutes, so it was recaptured. This is not a server-side vulnerability; it is disclosure of the secret by us.
+
+**Evidence.** The real flag value only exists at runtime: `entrypoint.sh` substitutes `$FLAG_2` (from the gitignored `.env`) into `/app/flag`; the committed `flag` file is only the placeholder. A search of all tracked files showed the real values appeared in exactly one place — `JOURNAL.md`. `docker-compose.yml` and the Dockerfile reference only `${FLAG_2}`; no real credentials are committed.
+
+**Ruled out a server exploit and a backdoor.** A full code audit found no route that can read `/app/flag`: every file-serving route (`get-document`, `get-version`, `read-watermark`, `create-watermark`) constrains paths to `STORAGE_DIR`, `load-plugin` is disabled (410), the delete-document SQL injection was fixed on 2026-10-14, the bash-bridge shell call was removed, and there is no template injection. Container inspection showed `/app/src` matches our source (no planted files), `entrypoint.sh` unmodified, cron clean, and only gunicorn processes running. Rebuilding with `--build` recreates the container, so any in-container persistence would not survive a rotation anyway.
+
+**Fix.** Rotated the flag; redacted the previously committed flag values from JOURNAL.md; going forward no flag value is written to the repository — the journal refers to the instructor's email for values. Note: the old values remain in git history and were public, so those flags are considered permanently burned; history scrubbing or moving off the public fork is the follow-up.
+
+**Related findings to address.**
+- `read-watermark` lacks an ownership check: any authenticated user can read the watermark secret of any document's version (no key needed for the toy methods). To fix with an ownership join like `list-versions`.
+- `entrypoint.sh` echoes the flag value to container logs; to be silenced.
