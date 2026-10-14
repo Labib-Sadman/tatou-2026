@@ -475,20 +475,16 @@ Professor Nicolas emailed that `flag_2` had been captured and provided a rotatio
 - Consider removing the `bash-bridge-eof` toy method from the registry entirely.
 - Database password rotation — still deferred; worth reconsidering given confirmed unauthorised access.
 
-## 2026-10-14 (late) — Incident: flag_2 captured again; root cause was self-inflicted disclosure in the public repository
+## 2026-10-14 (late) — flag 2 was captured
 
-Professor Nicolas reported flag_2 captured again and provided a new rotation value (kept out of this file by policy from now on; see instructor email).
+flag 2 was captured and a new value was issued. Rotated FLAG_2 in `.env`, rebuilt the server container, and confirmed the new value at `/app/flag` with `/healthz` reporting db_connected true.
 
-**Containment.** Rotated FLAG_2 in `.env` to the new value and rebuilt the server container; confirmed the new value at `/app/flag` and `/healthz` green.
+Root cause: the rotated flag values had been recorded in JOURNAL.md, which is tracked in our repository. Because the repository is a public fork, a recorded value was readable by anyone with access to the repository, so it did not stay secret after rotation. This is a disclosure on our side, not a server-side vulnerability.
 
-**Root cause: the rotated flag values were being committed to JOURNAL.md and pushed to our repository, which is a public fork.** Each time we rotated a flag and documented the new value, that value became publicly readable within minutes, so it was recaptured. This is not a server-side vulnerability; it is disclosure of the secret by us.
+Confirmation: `/app/flag` is populated at runtime by `entrypoint.sh` from `$FLAG_2` in the gitignored `.env`; the committed `flag` file holds only the placeholder. A search of all tracked files showed the real values appeared only in JOURNAL.md. A full review of the API found no route that can read `/app/flag` (get-document, get-version, read-watermark and create-watermark all restrict paths to STORAGE_DIR; load-plugin returns 410; the delete-document SQL injection was fixed earlier; no template injection). The running container was inspected: the source matches the repository, `entrypoint.sh` is unchanged, cron is clean, and only gunicorn is running.
 
-**Evidence.** The real flag value only exists at runtime: `entrypoint.sh` substitutes `$FLAG_2` (from the gitignored `.env`) into `/app/flag`; the committed `flag` file is only the placeholder. A search of all tracked files showed the real values appeared in exactly one place — `JOURNAL.md`. `docker-compose.yml` and the Dockerfile reference only `${FLAG_2}`; no real credentials are committed.
+Fix: rotated the flag and kept the new value out of the repository; removed the previously recorded values from JOURNAL.md. Flag values are no longer written to the repository. Values previously recorded remain in git history and are treated as no longer secret.
 
-**Ruled out a server exploit and a backdoor.** A full code audit found no route that can read `/app/flag`: every file-serving route (`get-document`, `get-version`, `read-watermark`, `create-watermark`) constrains paths to `STORAGE_DIR`, `load-plugin` is disabled (410), the delete-document SQL injection was fixed on 2026-10-14, the bash-bridge shell call was removed, and there is no template injection. Container inspection showed `/app/src` matches our source (no planted files), `entrypoint.sh` unmodified, cron clean, and only gunicorn processes running. Rebuilding with `--build` recreates the container, so any in-container persistence would not survive a rotation anyway.
-
-**Fix.** Rotated the flag; redacted the previously committed flag values from JOURNAL.md; going forward no flag value is written to the repository — the journal refers to the instructor's email for values. Note: the old values remain in git history and were public, so those flags are considered permanently burned; history scrubbing or moving off the public fork is the follow-up.
-
-**Related findings to address.**
-- `read-watermark` lacks an ownership check: any authenticated user can read the watermark secret of any document's version (no key needed for the toy methods). To fix with an ownership join like `list-versions`.
-- `entrypoint.sh` echoes the flag value to container logs; to be silenced.
+Follow-ups:
+- `read-watermark` does not check ownership: an authenticated user can read the watermark secret of any document's version. To be fixed with an ownership check like `list-versions`.
+- `entrypoint.sh` prints the flag value to the container log; to be silenced.
