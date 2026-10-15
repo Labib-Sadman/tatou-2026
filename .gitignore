@@ -210,3 +210,4 @@ __marimo__/
 keys/
 *.asc
 !keys/clients/*.asc
+logs/

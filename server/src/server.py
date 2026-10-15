@@ -863,3 +863,6 @@ if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
 
+# --- persistent security logging + enumeration detection ---
+from security_logging import init_security_logging
+init_security_logging(app)
