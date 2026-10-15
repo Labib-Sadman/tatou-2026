@@ -488,3 +488,37 @@ Fix: rotated the flag and kept the new value out of the repository; removed the 
 Follow-ups:
 - `read-watermark` does not check ownership: an authenticated user can read the watermark secret of any document's version. To be fixed with an ownership check like `list-versions`.
 - `entrypoint.sh` prints the flag value to the container log; to be silenced.
+
+## 2026-10-15 — Offensive: 3 × flag_3 captured (default SECRET_KEY forge)
+
+**Method:** Network sweep of `10.100.10.0/24` found ~13 live Tatou servers.
+Probed each `/api/list-documents` with a token forged from the hardcoded
+default `SECRET_KEY` (`"dev-secret-change-me"`, `salt="tatou-auth"`). Three
+servers accepted the forged token: `10.100.10.58`, `10.100.10.68`,
+`10.100.10.70`. Their `SECRET_KEY` was never rotated off the template
+default — the same weakness we fixed on our own server on 2026-09-25.
+
+Because the auth token carries a caller-chosen `uid` and no DB lookup is
+performed at verification time, forging a token for any uid gives that
+user's session. Enumerated uid 1-60 on each target via
+`/api/list-documents`, located each server's `flag_3` document (owned by
+that group's own `Mr Important`-style account), and downloaded it via
+`/api/get-document/<id>`. No password, no account creation.
+
+**Captured (three distinct groups) — values omitted from repo, reported to Nicolas:**
+- Group 10 (10.100.10.58, uid 53, doc 54): [flag_3 captured — see report]
+- Group 30 (10.100.10.68, uid 26, doc 24): [flag_3 captured — see report]
+- Group 34 (10.100.10.70, uid 34, doc 19): [flag_3 captured — see report]
+
+Group identity confirmed from each server's own uploaded documents
+(`Group_10.pdf`, `G30`, `Group_34.pdf`).
+
+**Tooling:** `forge6.py` (kept out of the repo; itsdangerous 2.2.0, matches
+the targets' version — token format differs across itsdangerous 1.x/2.x and
+the payload must stay under the compression threshold or the token gets a
+leading dot and is rejected).
+
+**Impact / defense implication:** Confirms our 2026-09-25 SECRET_KEY fix
+was necessary and is the single highest-value hardening on this template.
+Several other servers also run Tatou but rotate the secret; brute-forcing a
+wordlist against those failed, so a different vector would be needed.
