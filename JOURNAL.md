@@ -522,3 +522,35 @@ leading dot and is rejected).
 was necessary and is the single highest-value hardening on this template.
 Several other servers also run Tatou but rotate the secret; brute-forcing a
 wordlist against those failed, so a different vector would be needed.
+
+## 2026-10-15 — Incident: flag_2 captured; root cause = empty SECRET_KEY (token forgery)
+
+**Detection.** Persistent request logging (deployed 00:39 today) plus a code
+audit. The log shows a non-existent account `user=x` authenticating and
+reading documents (e.g. `GET /api/get-document/43 -> 200`), only possible
+with a forged token — proof the auth layer was trusting a guessable key.
+
+**Root cause.** `SECRET_KEY` defaulted to an empty/known value. `docker-
+compose.yml` wired `SECRET_KEY=${SECRET_KEY}` but `sample.env` (the template
+`.env` is copied from) never defined it, so the deployed key was empty, and
+`create_app` also fell back to the literal `"dev-secret-change-me"`.
+`require_auth` builds the session from the token's `uid`/`login` with no DB
+lookup, so anyone signing a token with the known key could impersonate any
+user — the same class we exploited against peer servers.
+
+**Scope note (honest).** The specific capture behind the instructor's email
+is not in the log: coverage began 00:39 today and the read predates it, so
+the exact request cannot be reconstructed. The only in-window successful
+`get-version` reads (01:19) were our own RMAP self-collection; the only
+foreign document read (`user=x`, doc 43) was after the email. The open door
+— the empty `SECRET_KEY` — is the confirmed cause.
+
+**Fix.** Set a strong random `SECRET_KEY` in `.env` (git-ignored); added a
+fail-closed check in `create_app` that refuses to start on an empty or
+default key; documented `SECRET_KEY` in `sample.env`. Rotated `FLAG_2` and
+rebuilt. Changing the key invalidates every previously-issued/forged token.
+Verified: `printenv SECRET_KEY` returns a 64-hex value.
+
+**Follow-up.** The enumeration detector only counts 4xx, so authenticated
+200-level scraping (a 60x `list-documents` burst was logged) slips past it;
+add a 2xx-volume-per-IP check.
