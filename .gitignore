@@ -213,3 +213,5 @@ keys/
 logs/
 server/mutants/
 .mutmut-cache
+server/htmlcov/
+.coverage

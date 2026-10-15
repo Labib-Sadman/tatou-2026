@@ -1,5 +1,5 @@
 # Spec-to-test mapping — Tatou (Group 20)
-pytest --cov=src: 50 passed, 2 pre-existing failures, 3 skipped, 53% total.
+pytest --cov=src: 67 passed, 2 pre-existing failures, 3 skipped, 53% total.
 
 ## Platform specs
 - P2 unwatermarked docs owner-only -> test_auth_regression (401 missing/forged/tampered)
@@ -18,8 +18,9 @@ pytest --cov=src: 50 passed, 2 pre-existing failures, 3 skipped, 53% total.
 - SECRET_KEY fail-closed -> create_app raises; verified printenv=64-hex
 - SQLi/IDOR fixes -> manual (401 / 404)
 
-## Coverage: qim 93, bash-bridge 94, rmap_routes 84, security_logging 84,
-## encrypted_metadata 81, server.py 29 (routes need DB), cli 0. TOTAL 53%.
+## Coverage: qim 94, bash-bridge 94, rmap_routes 84, security_logging 84,
+## encrypted_metadata 81, add_after_eof 80, watermarking_method 80
+## watermarking_utils 43, server.py 29 (routes need DB), cli 0. TOTAL 54%.
 
 ## Mutation (mutmut, qim_baseline only): 377 mutants, 277 killed, 83 survived,
 - 16 no-test = 76.7% reported / 78.7% after re-verifying the survivors against the full file. Coverage is 93% vs mutation 79% on the same module: Scope is only qim_baseline (so no DB/PGP, 1s suite); because mutating RMAP/API would take too long.
