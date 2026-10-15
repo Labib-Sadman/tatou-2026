@@ -1,58 +1,29 @@
-# tatou
-A web platform for pdf watermarking. This project is intended for pedagogical use, and contain security vulnerabilities. Do not deploy on an open network.
+# Tatou — Group 20
 
-## Instructions
+Flask + MariaDB PDF-watermarking platform (pedagogical, deliberately
+vulnerable — do not deploy on an open network). Group 20's hardened fork.
 
-The following instructions are meant for a bash terminal on a Linux machine. If you are using something else, you will need to adapt them.
+## Configure
+    cp sample.env .env
+    # set SECRET_KEY=<64-char hex>  (python3 -c "import secrets; print(secrets.token_hex(32))")
+    # set FLAG_2 and the MARIADB_* values
+SECRET_KEY is mandatory: the server signs auth tokens with it and fails closed
+if it is unset or default. .env is git-ignored, never committed.
 
-To clone the repo, you can simply run:
+## Deploy
+    docker compose up --build -d
+    curl -s localhost:5000/healthz
 
-```bash
-git clone https://github.com/nharrand/tatou-2026.git
-```
+## Test
+    cd server && python3 -m venv .venv && . .venv/bin/activate
+    python -m pip install -e ".[dev]"
+    python -m pytest --cov=src --cov-report=term-missing
+Python 3.13: pip install standard-imghdr first. conftest.py supplies a test key.
+Status: 50 passed, 2 failed, 3 skipped, 53% coverage. The 2 failures are a known
+zero-page test-fixture issue (pre-existing), not a defect. See common/SPEC_TO_TEST.md.
 
-Note that you should probably fork the repo and clone your own repo.
-
-
-### Run python unit tests
-
-```bash
-cd tatou/server
-
-# Create a python virtual environement
-python3 -m venv .venv
-
-# Activate your virtual environement
-. .venv/bin/activate
-
-# Install the necessary dependencies
-python -m pip install -e ".[dev]"
-
-# Run the unit tests
-python -m pytest
-```
-
-### Deploy
-
-From the root of the directory:
-
-```bash
-# Create a file to set environement variables like passwords.
-cp sample.env .env
-
-# Edit .env and pick the passwords you want
-
-# Rebuild the docker image and deploy the containers
-docker compose up --build -d
-
-# Monitor logs in realtime 
-docker compose logs -f
-
-# Test if the API is up
-http -v :5000/healthz
-
-# Open your browser at 127.0.0.1:5000 to check if the website is up.
-```
-
-
-
+## Security hardening (see JOURNAL.md)
+- SECRET_KEY: was empty/default; now strong + fail-closed.
+- load-plugin RCE disabled (410); delete-document SQLi fixed; IDOR fixed;
+  bash-bridge command injection fixed; persistent logging + enumeration detection.
+Residual: RMAP replay (FPT_RPL.1) not prevented (DoS, not forgery).
