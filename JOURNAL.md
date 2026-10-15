@@ -554,3 +554,30 @@ Verified: `printenv SECRET_KEY` returns a 64-hex value.
 **Follow-up.** The enumeration detector only counts 4xx, so authenticated
 200-level scraping (a 60x `list-documents` burst was logged) slips past it;
 add a 2xx-volume-per-IP check.
+
+## 2026-10-15 (eve) — RMAP: peer collection + server identity fix
+
+**Peer collection.** Collected watermarked PDFs via the RMAP protocol from the
+other live Tatou instances. Final set: **10 distinct groups** (02, 04, 06, 10,
+12, 16, 18, 22, 30, 34), one document each, in `common/rmap_pdfs/`. A few peers
+(08, 14, 32) rejected the handshake (their server-side config/version), per the
+"depending on whether the other groups' API allow it" caveat.
+
+**Root cause found while collecting: our RMAP identity was mismatched.** First
+attempts failed with decryption errors. Investigation showed our server was
+running RMAP keypair `CAC72D78…`, but the class key directory publishes Group 20
+as `91BE002C…`. Consequences: peers encrypted to `91BE002C` (which we could not
+decrypt), and peers could not complete a handshake with our server either — so
+RMAP was effectively broken both ways. The `91BE002C` private key was not a loose
+file on the VM; it was in the local GPG keyring (uid "SOFTSEC Group 20"). Exported
+it and used it as the RMAP identity.
+
+**Fix.** Installed the published `91BE002C` keypair as the server's RMAP key
+(`keys/server_priv.asc` / `server_pub.asc`), set `RMAP_PASSPHRASE` in the
+git-ignored `.env`, refreshed `keys/clients/` from the official key directory so
+the server encrypts replies to the correct peer keys, and rebuilt. Verified with
+a self-test handshake (returns a watermarked PDF) — two-way RMAP now works:
+we can collect from peers and peers can collect from us.
+
+**Note.** Auth `SECRET_KEY` (the 2026-10-15 token-forgery fix) is separate from
+the RMAP keys; this change did not affect it.
