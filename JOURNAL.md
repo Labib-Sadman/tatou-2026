@@ -581,3 +581,26 @@ we can collect from peers and peers can collect from us.
 
 **Note.** Auth `SECRET_KEY` (the 2026-10-15 token-forgery fix) is separate from
 the RMAP keys; this change did not affect it.
+
+
+## 2026-10-16 - Specialization B: Mutation testing of qim-baseline
+
+**Individual deliverable**: Mutmut was run against 'src/qim_baseline.py' with the 20-test suite. 
+First results were 377 mutants, of which 263 killed and 98 survived (73% mutation score), while
+the line coverage of the module is 93%. The coverage shows the lines that were ran, and 98 were 
+unasserted. Four actual gaps: The applicability treshold changed from '8 * 16' to '8 / 16' which
+dropped the requirement for carriers from 200 to ~72. This passed unnoticed. The MAC did not
+authenticate anything, replacing its message with 'None' makes it identical for every cyphertext
+under a given key, and the suite still passed because round-trip tests encrypt and decrypt with
+the same code and a MAC that ignores its messages still agrees with itself. Symmetric keystream
+changes were also invisible for the same reason: closed with known-answer vectors, which also
+protect interoperaility with independent implementations of the format. The visual-integrity
+assertion allowed 1pt displacement where the method only guaranteed 0.25pt. The qim-baseline 
+suite went from 20 to 27 tests, score from 73% to 77%.
+
+**Methodolocial Note**: Mutmut does not run the whole suit for each mutant - it attributes tests
+to functions during a stats pass and then only runs those. For helpers that are reached indirectly,
+that attribution is inclomplete, so the visual-integrity tests never run against '_quantize' and 
+its mutants were then reported as survivors. Re-running each imported survivor with 'MUTANT_UNDER_TEST'
+against the full test file showed that 6 of 83 were already dead, so the true score is 78.7%. A 
+false survivor costs time, so the reported list would have to be verified before being acted on.

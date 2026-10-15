@@ -211,3 +211,5 @@ keys/
 *.asc
 !keys/clients/*.asc
 logs/
+server/mutants/
+.mutmut-cache
