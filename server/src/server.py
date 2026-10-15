@@ -46,7 +46,11 @@ def create_app():
     app = Flask(__name__)
 
     # --- Config ---
-    app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "dev-secret-change-me")
+    # [sec] Auth tokens are signed with SECRET_KEY; empty/default key = forgeable.
+    _secret_key = os.environ.get("SECRET_KEY", "").strip()
+    if _secret_key in ("", "dev-secret-change-me"):
+        raise RuntimeError("SECRET_KEY is unset or left at the insecure default.")
+    app.config["SECRET_KEY"] = _secret_key
     app.config["STORAGE_DIR"] = Path(os.environ.get("STORAGE_DIR", "./storage")).resolve()
     app.config["TOKEN_TTL_SECONDS"] = int(os.environ.get("TOKEN_TTL_SECONDS", "86400"))
 
