@@ -624,7 +624,7 @@ the same code and a MAC that ignores its messages still agrees with itself. Symm
 changes were also invisible for the same reason: closed with known-answer vectors, which also
 protect interoperaility with independent implementations of the format. The visual-integrity
 assertion allowed 1pt displacement where the method only guaranteed 0.25pt. The qim-baseline 
-suite went from 20 to 27 tests, score from 73% to 77%.
+suite went from 20 to 37 tests, score from 73% to 77%.
 
 **Methodolocial Note**: Mutmut does not run the whole suit for each mutant - it attributes tests
 to functions during a stats pass and then only runs those. For helpers that are reached indirectly,
