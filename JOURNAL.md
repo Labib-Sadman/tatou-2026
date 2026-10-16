@@ -581,3 +581,32 @@ we can collect from peers and peers can collect from us.
 
 **Note.** Auth `SECRET_KEY` (the 2026-10-15 token-forgery fix) is separate from
 the RMAP keys; this change did not affect it.
+
+## 2026-10-16 — Incident: flag_3 captured; same root cause as flag_2 (already fixed)
+
+**Report.** The professor emailed that flag_3 was captured and provided a rotation value.
+
+**Investigation.** flag_3 is the PDF document owned by the `Mr_Important` account
+(doc id 43). The persistent log shows exactly one unauthorised read of it:
+`2026-10-15 13:00:13 user=x GET /api/get-document/43 -> 200` — a forged token
+(`user=x` is not a real account). This is the **same root cause as the flag_2
+incident**: the empty/default `SECRET_KEY` let an attacker forge a token for the
+document's owner and read it via `get-document`. Crucially, this read occurred
+**before** the SECRET_KEY hardening was deployed (~15:00 on 2026-10-15); there
+are **no reads of doc 43 after the fix**, so the vulnerability that led to this
+capture is already closed. No new vector.
+
+**Already fixed (2026-10-15).** Strong random `SECRET_KEY` + fail-closed check in
+`create_app`; forged tokens now return 401. No separate fix required here.
+
+**No leaked copies.** `SELECT ... FROM Versions WHERE documentid=43` is empty —
+no watermarked versions of flag_3 exist to re-download.
+
+**Rotation.** Regenerated the flag_3 PDF
+(`/app/storage/files/Mr_Important/...__flag_3.pdf`) with the new value and synced
+the stored `sha256`/`size` for doc 43 in the DB. Value kept out of the repo and
+this journal.
+
+**Note (not an incident).** `get-version` reads from 10.100.10.57/.62/.68/.69 on
+2026-10-16 are other groups legitimately collecting our RMAP document — expected,
+and confirms the RMAP server-identity fix made our instance collectable by peers.
