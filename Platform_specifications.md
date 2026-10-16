@@ -11,3 +11,20 @@
  - Documents SHOULD be available to their owner.
  - Documents SHOULD be removable by their owner.
  - Documents SHOULD not be modifiable by third parties.
+
+ ### RMAP handshake
+
+- The handshake MUST reject a previously used client or server nonce, and a
+  session MUST be invalidated once it has been used to issue a link.
+
+- Handshake state MUST be consistent across all server processes.
+
+- Handshake attempts, including rejected ones, SHOULD be recorded.
+
+### Watermarking
+
+- A watermarking method MUST refuse a document it cannot carry a payload in,
+  rather than producing a version whose secret cannot be recovered.
+
+- The platform MUST retain the key material required to read back every
+  watermark it has issued, for as long as attribution may be needed.
