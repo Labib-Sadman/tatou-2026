@@ -632,3 +632,15 @@ that attribution is inclomplete, so the visual-integrity tests never run against
 its mutants were then reported as survivors. Re-running each imported survivor with 'MUTANT_UNDER_TEST'
 against the full test file showed that 6 of 83 were already dead, so the true score is 78.7%. A 
 false survivor costs time, so the reported list would have to be verified before being acted on.
+
+## 2026-10-16 — Defense: RMAP replay detection (FPT_RPL.1)
+
+Track 1 testing had found that the reference RMAP handshake does not detect
+replay (a captured Message 2 could be resent and re-answered). Added replay
+detection in `/api/rmap-get-link`: if a Versions row already exists for the
+handshake's link, the message is a replay of an already-completed handshake and
+is refused with the uniform error (409). The replay tests in
+`test_rmap_routes.py` were updated to assert rejection; all RMAP tests pass.
+Residual: replaying Message 1 still displaces the pending session (library-level
+session handling) — a documented DoS, not forgery. Legitimate handshakes are
+unaffected (each produces a unique link), so peer collection still works.
