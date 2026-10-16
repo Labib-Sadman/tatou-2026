@@ -233,10 +233,7 @@ class TestReplayBehaviour:
         first = tc.post("/api/rmap-get-link", json=msg2)
         assert first.status_code == 200
         replay = tc.post("/api/rmap-get-link", json=msg2)
-        assert replay.status_code == 200, (
-            "Message 2 replay is now rejected - replay handling has changed "
-            "and the Track 1 finding needs revisiting"
-        )
+        assert replay.status_code == 409  # FPT_RPL.1: replay now detected and refused
 
     def test_replay_returns_the_same_link_not_a_new_one(self, env):
         """Impact bound: the replay yields the existing link, not a fresh one."""
@@ -247,7 +244,7 @@ class TestReplayBehaviour:
         msg2 = client.build_msg2()
         tc.post("/api/rmap-get-link", json=msg2)
         replay = tc.post("/api/rmap-get-link", json=msg2)
-        assert client.expected_link in client.process_resp2(replay.get_json())
+        assert replay.status_code == 409  # FPT_RPL.1: rejected, no link issued
 
     def test_replay_creates_no_duplicate_version(self, env):
         """A replay must not produce a second watermarked copy."""

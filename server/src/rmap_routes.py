@@ -267,6 +267,13 @@ def register_rmap_routes(app, get_engine) -> None:
         except RMAPError as exc:
             return _rmap_error(exc)
 
+        # [sec] FPT_RPL.1: reject a replayed (already-completed) handshake.
+        with get_engine().connect() as conn:
+            _dup = conn.execute(text("SELECT 1 FROM Versions WHERE link = :l LIMIT 1"),
+                                {"l": expected_link}).first()
+        if _dup:
+            return jsonify({"error": "rmap handshake failed"}), 409
+
         # The specification is explicit: no link may be returned unless
         # the watermarked version exists and is recorded. A failure here
         # is ours, not the client's, hence 500.
