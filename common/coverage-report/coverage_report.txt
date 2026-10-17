@@ -1,0 +1,377 @@
+.............................................s...sF..sF                  [100%]
+=================================== FAILURES ===================================
+_ TestAllWatermarkingMethods.test_add_watermark_and_shape[encrypted-metadata] __
+
+self = <encrypted_metadata.EncryptedMetadataWatermark object at 0x7f49f7aa5e80>
+pdf = PosixPath('/tmp/pytest-of-softsec/pytest-1/pdfs0/sample.pdf')
+secret = 'unit-test-secret', key = 'unit-test-key', position = None
+
+    def add_watermark(
+        self,
+        pdf: PdfSource,
+        secret: str,
+        key: str,
+        position: str | None = None,
+    ) -> bytes:
+        data = load_pdf_bytes(pdf)
+        if not secret:
+            raise ValueError("Secret must be a non-empty string")
+        if not isinstance(key, str) or not key:
+            raise ValueError("Key must be a non-empty string")
+    
+        salt = os.urandom(self._SALT_LEN)
+        nonce = os.urandom(self._NONCE_LEN)
+        aes_key = self._derive_key(key, salt)
+    
+        ciphertext = AESGCM(aes_key).encrypt(nonce, secret.encode("utf-8"), None)
+        payload = base64.urlsafe_b64encode(salt + nonce + ciphertext).decode("ascii")
+    
+        try:
+            doc = fitz.open(stream=data, filetype="pdf")
+        except Exception as exc:
+            raise WatermarkingError(f"Failed to open PDF: {exc}") from exc
+    
+        try:
+            info_xref = self._ensure_info_xref(doc)
+            doc.xref_set_key(info_xref, self._INFO_KEY, f"({payload})")
+>           out = doc.tobytes()
+                  ^^^^^^^^^^^^^
+
+src/encrypted_metadata.py:83: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.13/site-packages/pymupdf/__init__.py:7979: in tobytes
+    return self.write(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/pymupdf/__init__.py:7952: in write
+    self.save(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = closed Document('None', <memory, doc# 65>)
+filename = <_io.BytesIO object at 0x7f49f58349a0>, garbage = False
+clean = False, deflate = False, deflate_images = False, deflate_fonts = False
+incremental = False, ascii = False, expand = False, linear = False
+no_new_id = False, appearance = False, pretty = False, encryption = 1
+permissions = 4095, owner_pw = None, user_pw = None, preserve_metadata = 1
+use_objstms = 0, compression_effort = 0, raise_on_repair = False
+reproducible = False
+
+    def save(
+            self,
+            filename,
+            garbage=0,
+            clean=0,
+            deflate=0,
+            deflate_images=0,
+            deflate_fonts=0,
+            incremental=0,
+            ascii=0,
+            expand=0,
+            linear=0,
+            no_new_id=0,
+            appearance=0,
+            pretty=0,
+            encryption=1,
+            permissions=4095,
+            owner_pw=None,
+            user_pw=None,
+            preserve_metadata=1,
+            use_objstms=0,
+            compression_effort=0,
+            raise_on_repair=False,
+            reproducible=False,
+            ):
+        # From %pythonprepend save
+        #
+        is_repaired_pre = self.is_repaired
+        """Save PDF to file, pathlib.Path or file pointer."""
+        if self.is_closed or self.is_encrypted:
+            raise ValueError("document closed or encrypted")
+        if type(filename) is str:
+            pass
+        elif hasattr(filename, "open"):  # assume: pathlib.Path
+            filename = str(filename)
+        elif hasattr(filename, "name"):  # assume: file object
+            filename = filename.name
+        elif not hasattr(filename, "seek"):  # assume file object
+            raise ValueError("filename must be str, Path or file object")
+        if filename == self.name and not incremental:
+            raise ValueError("save to original must be incremental")
+        if linear and use_objstms:
+            raise ValueError("'linear' and 'use_objstms' cannot both be requested")
+        if self.page_count < 1:
+>           raise ValueError("cannot save with zero pages")
+E           ValueError: cannot save with zero pages
+
+.venv/lib/python3.13/site-packages/pymupdf/__init__.py:6597: ValueError
+
+The above exception was the direct cause of the following exception:
+
+self = <test_watermarking_all_methods.TestAllWatermarkingMethods object at 0x7f49f7c79650>
+method_name = 'encrypted-metadata'
+impl = <encrypted_metadata.EncryptedMetadataWatermark object at 0x7f49f7aa5e80>
+sample_pdf_path = PosixPath('/tmp/pytest-of-softsec/pytest-1/pdfs0/sample.pdf')
+secret = 'unit-test-secret', key = 'unit-test-key'
+
+    def test_add_watermark_and_shape(self, method_name: str, impl: object, sample_pdf_path: Path, secret: str, key: str):
+        wm_impl = _as_instance(impl)
+        if not wm_impl.is_watermark_applicable(sample_pdf_path, position=None):
+            pytest.skip(f"{method_name}: not applicable to the sample PDF")
+        original = sample_pdf_path.read_bytes()
+>       out_bytes = wm_impl.add_watermark(sample_pdf_path, secret=secret, key=key, position=None)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+test/test_watermarking_all_methods.py:68: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <encrypted_metadata.EncryptedMetadataWatermark object at 0x7f49f7aa5e80>
+pdf = PosixPath('/tmp/pytest-of-softsec/pytest-1/pdfs0/sample.pdf')
+secret = 'unit-test-secret', key = 'unit-test-key', position = None
+
+    def add_watermark(
+        self,
+        pdf: PdfSource,
+        secret: str,
+        key: str,
+        position: str | None = None,
+    ) -> bytes:
+        data = load_pdf_bytes(pdf)
+        if not secret:
+            raise ValueError("Secret must be a non-empty string")
+        if not isinstance(key, str) or not key:
+            raise ValueError("Key must be a non-empty string")
+    
+        salt = os.urandom(self._SALT_LEN)
+        nonce = os.urandom(self._NONCE_LEN)
+        aes_key = self._derive_key(key, salt)
+    
+        ciphertext = AESGCM(aes_key).encrypt(nonce, secret.encode("utf-8"), None)
+        payload = base64.urlsafe_b64encode(salt + nonce + ciphertext).decode("ascii")
+    
+        try:
+            doc = fitz.open(stream=data, filetype="pdf")
+        except Exception as exc:
+            raise WatermarkingError(f"Failed to open PDF: {exc}") from exc
+    
+        try:
+            info_xref = self._ensure_info_xref(doc)
+            doc.xref_set_key(info_xref, self._INFO_KEY, f"({payload})")
+            out = doc.tobytes()
+        except Exception as exc:
+>           raise WatermarkingError(f"Failed to embed watermark: {exc}") from exc
+E           watermarking_method.WatermarkingError: Failed to embed watermark: cannot save with zero pages
+
+src/encrypted_metadata.py:85: WatermarkingError
+__ TestAllWatermarkingMethods.test_read_secret_roundtrip[encrypted-metadata] ___
+
+self = <encrypted_metadata.EncryptedMetadataWatermark object at 0x7f49f7aa5e80>
+pdf = PosixPath('/tmp/pytest-of-softsec/pytest-1/pdfs0/sample.pdf')
+secret = 'unit-test-secret', key = 'unit-test-key', position = None
+
+    def add_watermark(
+        self,
+        pdf: PdfSource,
+        secret: str,
+        key: str,
+        position: str | None = None,
+    ) -> bytes:
+        data = load_pdf_bytes(pdf)
+        if not secret:
+            raise ValueError("Secret must be a non-empty string")
+        if not isinstance(key, str) or not key:
+            raise ValueError("Key must be a non-empty string")
+    
+        salt = os.urandom(self._SALT_LEN)
+        nonce = os.urandom(self._NONCE_LEN)
+        aes_key = self._derive_key(key, salt)
+    
+        ciphertext = AESGCM(aes_key).encrypt(nonce, secret.encode("utf-8"), None)
+        payload = base64.urlsafe_b64encode(salt + nonce + ciphertext).decode("ascii")
+    
+        try:
+            doc = fitz.open(stream=data, filetype="pdf")
+        except Exception as exc:
+            raise WatermarkingError(f"Failed to open PDF: {exc}") from exc
+    
+        try:
+            info_xref = self._ensure_info_xref(doc)
+            doc.xref_set_key(info_xref, self._INFO_KEY, f"({payload})")
+>           out = doc.tobytes()
+                  ^^^^^^^^^^^^^
+
+src/encrypted_metadata.py:83: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.13/site-packages/pymupdf/__init__.py:7979: in tobytes
+    return self.write(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/pymupdf/__init__.py:7952: in write
+    self.save(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = closed Document('None', <memory, doc# 68>)
+filename = <_io.BytesIO object at 0x7f49f56cfbf0>, garbage = False
+clean = False, deflate = False, deflate_images = False, deflate_fonts = False
+incremental = False, ascii = False, expand = False, linear = False
+no_new_id = False, appearance = False, pretty = False, encryption = 1
+permissions = 4095, owner_pw = None, user_pw = None, preserve_metadata = 1
+use_objstms = 0, compression_effort = 0, raise_on_repair = False
+reproducible = False
+
+    def save(
+            self,
+            filename,
+            garbage=0,
+            clean=0,
+            deflate=0,
+            deflate_images=0,
+            deflate_fonts=0,
+            incremental=0,
+            ascii=0,
+            expand=0,
+            linear=0,
+            no_new_id=0,
+            appearance=0,
+            pretty=0,
+            encryption=1,
+            permissions=4095,
+            owner_pw=None,
+            user_pw=None,
+            preserve_metadata=1,
+            use_objstms=0,
+            compression_effort=0,
+            raise_on_repair=False,
+            reproducible=False,
+            ):
+        # From %pythonprepend save
+        #
+        is_repaired_pre = self.is_repaired
+        """Save PDF to file, pathlib.Path or file pointer."""
+        if self.is_closed or self.is_encrypted:
+            raise ValueError("document closed or encrypted")
+        if type(filename) is str:
+            pass
+        elif hasattr(filename, "open"):  # assume: pathlib.Path
+            filename = str(filename)
+        elif hasattr(filename, "name"):  # assume: file object
+            filename = filename.name
+        elif not hasattr(filename, "seek"):  # assume file object
+            raise ValueError("filename must be str, Path or file object")
+        if filename == self.name and not incremental:
+            raise ValueError("save to original must be incremental")
+        if linear and use_objstms:
+            raise ValueError("'linear' and 'use_objstms' cannot both be requested")
+        if self.page_count < 1:
+>           raise ValueError("cannot save with zero pages")
+E           ValueError: cannot save with zero pages
+
+.venv/lib/python3.13/site-packages/pymupdf/__init__.py:6597: ValueError
+
+The above exception was the direct cause of the following exception:
+
+self = <test_watermarking_all_methods.TestAllWatermarkingMethods object at 0x7f49f5b51a90>
+method_name = 'encrypted-metadata'
+impl = <encrypted_metadata.EncryptedMetadataWatermark object at 0x7f49f7aa5e80>
+sample_pdf_path = PosixPath('/tmp/pytest-of-softsec/pytest-1/pdfs0/sample.pdf')
+secret = 'unit-test-secret', key = 'unit-test-key'
+tmp_path = PosixPath('/tmp/pytest-of-softsec/pytest-1/test_read_secret_roundtrip_enc0')
+
+    def test_read_secret_roundtrip(self, method_name: str, impl: object, sample_pdf_path: Path, secret: str, key: str, tmp_path: Path):
+        wm_impl = _as_instance(impl)
+        if not wm_impl.is_watermark_applicable(sample_pdf_path, position=None):
+            pytest.skip(f"{method_name}: not applicable to the sample PDF")
+        out_pdf = tmp_path / f"{method_name}_watermarked.pdf"
+>       out_pdf.write_bytes(wm_impl.add_watermark(sample_pdf_path, secret=secret, key=key, position=None))
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+test/test_watermarking_all_methods.py:78: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <encrypted_metadata.EncryptedMetadataWatermark object at 0x7f49f7aa5e80>
+pdf = PosixPath('/tmp/pytest-of-softsec/pytest-1/pdfs0/sample.pdf')
+secret = 'unit-test-secret', key = 'unit-test-key', position = None
+
+    def add_watermark(
+        self,
+        pdf: PdfSource,
+        secret: str,
+        key: str,
+        position: str | None = None,
+    ) -> bytes:
+        data = load_pdf_bytes(pdf)
+        if not secret:
+            raise ValueError("Secret must be a non-empty string")
+        if not isinstance(key, str) or not key:
+            raise ValueError("Key must be a non-empty string")
+    
+        salt = os.urandom(self._SALT_LEN)
+        nonce = os.urandom(self._NONCE_LEN)
+        aes_key = self._derive_key(key, salt)
+    
+        ciphertext = AESGCM(aes_key).encrypt(nonce, secret.encode("utf-8"), None)
+        payload = base64.urlsafe_b64encode(salt + nonce + ciphertext).decode("ascii")
+    
+        try:
+            doc = fitz.open(stream=data, filetype="pdf")
+        except Exception as exc:
+            raise WatermarkingError(f"Failed to open PDF: {exc}") from exc
+    
+        try:
+            info_xref = self._ensure_info_xref(doc)
+            doc.xref_set_key(info_xref, self._INFO_KEY, f"({payload})")
+            out = doc.tobytes()
+        except Exception as exc:
+>           raise WatermarkingError(f"Failed to embed watermark: {exc}") from exc
+E           watermarking_method.WatermarkingError: Failed to embed watermark: cannot save with zero pages
+
+src/encrypted_metadata.py:85: WatermarkingError
+=============================== warnings summary ===============================
+.venv/lib/python3.13/site-packages/pgpy/constants.py:5
+  /home/softsec/tatou-2026/server/.venv/lib/python3.13/site-packages/pgpy/constants.py:5: DeprecationWarning: imghdr was removed in Python 3.13. Please be aware that you are currently NOT using standard 'imghdr', but instead a separately installed 'standard-imghdr'.
+    import imghdr
+
+test/test_rmap_routes.py: 13 warnings
+  /home/softsec/tatou-2026/server/.venv/lib/python3.13/site-packages/pgpy/constants.py:193: CryptographyDeprecationWarning: TripleDES has been moved to cryptography.hazmat.decrepit.ciphers.algorithms.TripleDES and will be removed from cryptography.hazmat.primitives.ciphers.algorithms in 48.0.0.
+    SymmetricKeyAlgorithm.TripleDES: algorithms.TripleDES,
+
+test/test_rmap_routes.py: 13 warnings
+  /home/softsec/tatou-2026/server/.venv/lib/python3.13/site-packages/pgpy/constants.py:200: CryptographyDeprecationWarning: Camellia has been moved to cryptography.hazmat.decrepit.ciphers.algorithms.Camellia and will be removed from cryptography.hazmat.primitives.ciphers.algorithms in 49.0.0.
+    SymmetricKeyAlgorithm.Camellia128: algorithms.Camellia,
+
+test/test_rmap_routes.py: 13 warnings
+  /home/softsec/tatou-2026/server/.venv/lib/python3.13/site-packages/pgpy/constants.py:201: CryptographyDeprecationWarning: Camellia has been moved to cryptography.hazmat.decrepit.ciphers.algorithms.Camellia and will be removed from cryptography.hazmat.primitives.ciphers.algorithms in 49.0.0.
+    SymmetricKeyAlgorithm.Camellia192: algorithms.Camellia,
+
+test/test_rmap_routes.py: 13 warnings
+  /home/softsec/tatou-2026/server/.venv/lib/python3.13/site-packages/pgpy/constants.py:202: CryptographyDeprecationWarning: Camellia has been moved to cryptography.hazmat.decrepit.ciphers.algorithms.Camellia and will be removed from cryptography.hazmat.primitives.ciphers.algorithms in 49.0.0.
+    SymmetricKeyAlgorithm.Camellia256: algorithms.Camellia}
+
+test/test_rmap_routes.py: 13 warnings
+  /home/softsec/tatou-2026/server/.venv/lib/python3.13/site-packages/pgpy/symenc.py:29: CryptographyDeprecationWarning: CFB has been moved to cryptography.hazmat.decrepit.ciphers.modes.CFB and will be removed from cryptography.hazmat.primitives.ciphers.modes in 49.0.0.
+    encryptor = Cipher(alg.cipher(key), modes.CFB(iv), default_backend()).encryptor()
+
+test/test_rmap_routes.py: 13 warnings
+  /home/softsec/tatou-2026/server/.venv/lib/python3.13/site-packages/pgpy/symenc.py:50: CryptographyDeprecationWarning: CFB has been moved to cryptography.hazmat.decrepit.ciphers.modes.CFB and will be removed from cryptography.hazmat.primitives.ciphers.modes in 49.0.0.
+    decryptor = Cipher(alg.cipher(key), modes.CFB(iv), default_backend()).decryptor()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.13.5-final-0 ________________
+
+Name                                   Stmts   Miss  Cover   Missing
+--------------------------------------------------------------------
+src/add_after_eof.py                      70     14    80%   69, 85, 87, 98, 119, 123, 131, 136-137, 140, 142, 148-149, 153
+src/encrypted_metadata.py                101     19    81%   53, 64, 66, 77-78, 101-102, 107, 111-112, 121, 125, 129-130, 133, 143-144, 176, 181
+src/qim_baseline.py                      161     11    93%   115, 158-159, 167, 174, 188, 193, 215-216, 225, 279
+src/rmap_routes.py                       131     21    84%   102, 141-147, 154, 158-159, 172, 186, 190, 198, 204, 233-235, 245, 260, 275-277
+src/security_logging.py                   50      8    84%   32, 40-41, 69, 71-75
+src/server.py                            438    312    29%   20-21, 37-40, 43, 52, 96, 104-108, 114, 118, 124-125, 133-158, 163-186, 192-241, 253-274, 284-314, 321-343, 352-404, 410-452, 456-470, 478-534, 549-677, 765-770, 778-850, 867-868
+src/unsafe_bash_bridge_append_eof.py      18      1    94%   35
+src/watermarking_cli.py                  126    126     0%   28-243
+src/watermarking_method.py                41      8    80%   104-108, 113, 158, 199, 233, 260
+src/watermarking_utils.py                 81     46    43%   69, 81, 84-85, 134, 162-244
+--------------------------------------------------------------------
+TOTAL                                   1217    566    53%
+Coverage HTML written to dir htmlcov
+=========================== short test summary info ============================
+FAILED test/test_watermarking_all_methods.py::TestAllWatermarkingMethods::test_add_watermark_and_shape[encrypted-metadata]
+FAILED test/test_watermarking_all_methods.py::TestAllWatermarkingMethods::test_read_secret_roundtrip[encrypted-metadata]
+2 failed, 50 passed, 3 skipped, 79 warnings in 6.31s
