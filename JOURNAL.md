@@ -505,7 +505,7 @@ user's session. Enumerated uid 1-60 on each target via
 that group's own `Mr Important`-style account), and downloaded it via
 `/api/get-document/<id>`. No password, no account creation.
 
-**Captured (three distinct groups) — values omitted from repo, reported to Nicolas:**
+**Captured (three distinct groups) — values omitted from repo, reported to the professor:**
 - Group 10 (10.100.10.58, uid 53, doc 54): [flag_3 captured — see report]
 - Group 30 (10.100.10.68, uid 26, doc 24): [flag_3 captured — see report]
 - Group 34 (10.100.10.70, uid 34, doc 19): [flag_3 captured — see report]
