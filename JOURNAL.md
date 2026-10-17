@@ -49,7 +49,7 @@ implementation bug.
 
 ## 2026-09-25 — Incident: `FLAG_2` Captured by Another Group
 
-**Notification:** Instructor (Nicolas) emailed that our `flag_2` had been
+**Notification:** the instructor emailed that our `flag_2` had been
 captured by another group and asked us to rotate it, investigate the cause,
 fix the vulnerability, and log the incident (this entry).
 
@@ -238,7 +238,7 @@ watermarked PDF without logging in.
 rows matched `sha1(CONCAT(doc_name_stem, "__", intended_for, ".pdf"))`,
 confirming the bug was real and currently exploitable, not theoretical.
 (This check also resolved an earlier open question: a `flag_3` document
-owned by `mr_important@example.com`, user id 52, was Professor Nicolas's legitimate
+owned by `mr_important@example.com`, user id 52, was the professor's legitimate
 Phase II flag delivery, not a stray audit artifact — confirmed only one such
 account exists, no naming collision.)
 
@@ -289,12 +289,12 @@ the same link and returns 200 again. Severity assessed as low in practice —
 network observer who replays the captured ciphertext still cannot read the
 result without that identity's private key. Decided not to patch this
 ourselves (third-party library code that would be overwritten on every
-rebuild anyway); Professor Nicolas's 2026-10-11 announcement says he is addressing
+rebuild anyway); the professor's 2026-10-11 announcement says he is addressing
 RMAP issues this week.
 
 ## 2026-10-12/13 — RMAP v2.0.0 Upgrade and First Working Deployment
 
-Professor Nicolas announced the shared test bench's RMAP test is now working, and
+the professor announced the shared test bench's RMAP test is now working, and
 published `rmap` v2.0.0, fixing a server crash on a malformed-but-validly-
 encrypted message found by another group.
 
@@ -304,7 +304,7 @@ encrypted message found by another group.
   (commit `05dbe9b`).
 - Checked `RMAP_LINK_PREFIX`: unset in `.env`, defaulting to an empty
   string, so we already return the bare 32-hex nonce concatenation as the
-  link rather than a full URL — matching what Professor Nicolas said the test bench
+  link rather than a full URL — matching what the professor said the test bench
   expects (some other groups fail this check for sending the full URL
   instead).
 
@@ -322,7 +322,7 @@ Fixed by following `RMAP_SETUP.md`:
    placed at `keys/server_priv.asc` / `keys/server_pub.asc` on the VM
    (private key `chmod 600`). Not committed — gitignored by design, exists
    only on this VM. **Needs separate backup/handoff if the VM is rebuilt.**
-2. Uploaded the assigned `Group_20.pdf` (emailed earlier by Professor Nicolas) via
+2. Uploaded the assigned `Group_20.pdf` (emailed earlier by the professor) via
    the normal upload API under a new dedicated account,
    `rmap-service@softsec.invalid` (user id 70), document id 55.
 3. Set `RMAP_DOCUMENT_ID=55` in `.env` and recreated the server container
@@ -347,12 +347,12 @@ present in the code.
   cross-group handshake will succeed.
 - Our `keys/server_pub.asc` has not yet been published anywhere for other
   groups to use.
-- A real cross-group RMAP test (per Professor Nicolas's recommendation) has not been
+- A real cross-group RMAP test (per the professor's recommendation) has not been
   done yet.
 
 ## 2026-10-13 — Incident: `flag_3` Captured by Another Group
 
-**Notification:** Instructor (Professor Nicolas) emailed that our `flag_3` had
+**Notification:** Instructor (the professor) emailed that our `flag_3` had
 been captured by another group and asked us to rotate it, investigate the
 cause, fix the vulnerability, and log the incident (this entry). New value
 provided: `[REDACTED — value in instructor email]`.
@@ -455,7 +455,7 @@ sensitive beyond the flag already reported and rotated.
 
 ## 2026-10-14 — Incident: flag_2 captured again, unauthenticated SQL injection in delete-document fixed
 
-Professor Nicolas emailed that `flag_2` had been captured and provided a rotation value: `[REDACTED — value in instructor email]`.
+the professor emailed that `flag_2` had been captured and provided a rotation value: `[REDACTED — value in instructor email]`.
 
 **Containment.** Rotated `FLAG_2` in `.env` to the new value and rebuilt the server container. Confirmed the new value is present at `/app/flag` inside the container and that `/healthz` reports `db_connected: true`.
 
